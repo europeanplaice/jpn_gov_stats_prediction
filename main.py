@@ -112,11 +112,11 @@ def main():
     )
     # shutil.copytree("darts_logs/train", "darts_logs/finetuning", dirs_exist_ok=True)
     prediction_on_val = model.predict(
-        len(val_group[0]), series=train_group, num_samples=100, n_jobs=-1
+        len(val_group[0]), series=train_group, num_samples=100
     )
     # model = NBEATSModel.load_from_checkpoint("finetuning", best=False)
     model.fit(group, verbose=True, epochs=n_epochs_pre + n_epochs + n_epochs_finetune)
-    future_prediction = model.predict(18, series=group, num_samples=100, n_jobs=-1)
+    future_prediction = model.predict(18, series=group, num_samples=100)
     smape_val: list[float] = []
     for i in tqdm(range(len(val_group))):
         smape_val.append(smape(val_group[i], prediction_on_val[i]))
