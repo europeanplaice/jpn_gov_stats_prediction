@@ -1,6 +1,6 @@
 # 鉱工業指数予測
 Neural Basis Expansion Analysis Time Series Forecasting (N-BEATS) を用いて鉱工業指数を予測します。  
-darts(https://unit8co.github.io/darts/index.html)というライブラリを使用し実装しています。
+darts(https://unit8co.github.io/darts/index.html) というライブラリを使用し実装しています。
 
 ## 仕様
 データは https://www.meti.go.jp/statistics/tyo/iip/b2015_result-2.html からダウンロードしています。周期としては月次データを用い、時系列を学習データ(2020/12まで)と検証データ(2021/1から)に分割しています。予測は2022年8月から18か月後まで算出しています。
