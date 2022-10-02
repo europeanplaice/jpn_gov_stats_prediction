@@ -89,7 +89,7 @@ def main():
         [x for x in category if category.count(x) > 1]
     )
     n_epochs_pre = 1
-    n_epochs = 3
+    n_epochs = 1
     n_epochs_finetune = 1
     group_pre, _, _ = prepare_timeseries(df_old, category_old, split=False)
     group, train_group, val_group = prepare_timeseries(df, category, split=True)
@@ -102,19 +102,19 @@ def main():
         n_epochs=0,
         batch_size=1024,
         likelihood=GaussianLikelihood(),
-        num_blocks=1
+        num_blocks=2
     )
     model.fit(group_pre, verbose=True, epochs=n_epochs_pre)
-    shutil.copytree("darts_logs/pretrain", "darts_logs/train", dirs_exist_ok=True)
-    model = NBEATSModel.load_from_checkpoint("train", best=False)
+    # shutil.copytree("darts_logs/pretrain", "darts_logs/train", dirs_exist_ok=True)
+    # model = NBEATSModel.load_from_checkpoint("train", best=False)
     model.fit(
-        train_group, val_series=val_group, verbose=True, epochs=n_epochs_pre + n_epochs
+        train_group, verbose=True, epochs=n_epochs_pre + n_epochs
     )
-    shutil.copytree("darts_logs/train", "darts_logs/finetuning", dirs_exist_ok=True)
+    # shutil.copytree("darts_logs/train", "darts_logs/finetuning", dirs_exist_ok=True)
     prediction_on_val = model.predict(
         len(val_group[0]), series=train_group, num_samples=100, n_jobs=-1
     )
-    model = NBEATSModel.load_from_checkpoint("finetuning", best=False)
+    # model = NBEATSModel.load_from_checkpoint("finetuning", best=False)
     model.fit(group, verbose=True, epochs=n_epochs_pre + n_epochs + n_epochs_finetune)
     future_prediction = model.predict(18, series=group, num_samples=100, n_jobs=-1)
     smape_val: list[float] = []
@@ -127,7 +127,7 @@ def main():
             [
                 prediction_on_val[i].quantiles_df(),
                 future_prediction[i].quantiles_df()
-            ]).to_excel(f"sheets/{category[i]}.xlsx")
+            ]).to_excel(f"data/sheets/{category[i]}.xlsx")
         future_prediction[i].plot(label="future prediction")
         plt.legend()
         plt.savefig(f"data/high_quality/{category[i]}.jpg", dpi=300)
