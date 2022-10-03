@@ -69,8 +69,8 @@ def prepare_timeseries(df: pd.DataFrame, category: list[str], split: bool):
     for i in category:
         scaler = BoxCox()
         try:
-            # df[i] = df[i].astype(float).values
-            df[i] = zscore(df[i].astype(float).values)
+            df[i] = df[i].astype(float).values / 100.
+            # df[i] = zscore(df[i].astype(float).values)
             series = TimeSeries.from_dataframe(df, time_col="time", value_cols=i)
         except (TypeError, ValueError):
             print("error", i)
@@ -98,8 +98,8 @@ def main():
         [x for x in category if category.count(x) > 1]
     )
     n_epochs_pre = 1
-    n_epochs = 10
-    n_epochs_finetune = 10
+    n_epochs = 1
+    n_epochs_finetune = 1
     group_pre, _, _, category_old = prepare_timeseries(df_old, category_old, split=False)
     group, train_group, val_group, category = prepare_timeseries(df, category, split=True)
     # model = LightGBMModel(12)
@@ -118,14 +118,15 @@ def main():
         model_name="train",
         force_reset=True,
         n_epochs=0,
-        batch_size=1024,
+        batch_size=32,
         likelihood=GaussianLikelihood(),
         num_blocks=1,
         pl_trainer_kwargs={"accelerator": "auto"},
-        generic_architecture=False
+        generic_architecture=True,
+        optimizer_kwargs={'lr': 1e-4}
     )
     model.fit(group_pre, verbose=True, epochs=n_epochs_pre)
-    model = NBEATSModel.load_from_checkpoint("train", best=False)
+    # model = NBEATSModel.load_from_checkpoint("train", best=False)
     model.fit(
         train_group, verbose=True, epochs=n_epochs
     )
@@ -134,7 +135,7 @@ def main():
     )
     global_smape = smape(val_group, prediction_on_val)
     print("global smape", np.mean(global_smape))
-    model = NBEATSModel.load_from_checkpoint("train", best=False)
+    # model = NBEATSModel.load_from_checkpoint("train", best=False)
     model.fit(group, verbose=True, epochs=n_epochs_finetune)
     future_prediction = model.predict(18, series=group, num_samples=200)
     smape_val: list[float] = []
