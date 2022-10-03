@@ -10,6 +10,9 @@ from tqdm import tqdm
 import copy
 from darts.metrics.metrics import smape
 import os, shutil
+import numpy as np
+from darts.dataprocessing.transformers import Scaler, BoxCox
+from darts.models.forecasting.gradient_boosted_model import LightGBMModel
 
 
 def old_data():
@@ -62,13 +65,17 @@ def prepare_timeseries(df: pd.DataFrame, category: list[str], split: bool):
     train_group = []
     val_group = []
     group = []
+    invalid = []
     for i in category:
+        scaler = BoxCox()
         try:
+            # df[i] = df[i].astype(float).values
             df[i] = zscore(df[i].astype(float).values)
+            series = TimeSeries.from_dataframe(df, time_col="time", value_cols=i)
         except (TypeError, ValueError):
             print("error", i)
+            invalid.append(i)
             continue
-        series = TimeSeries.from_dataframe(df, time_col="time", value_cols=i)
         if split:
             train, val = series.split_before(pd.Timestamp("2021-01-01"))
             assert len(train) == 96
@@ -77,47 +84,63 @@ def prepare_timeseries(df: pd.DataFrame, category: list[str], split: bool):
             train_group.append(train)
             val_group.append(val)
         group.append(series)
-    return group, train_group, val_group
+    for i in invalid:
+        category.remove(i)
+    return group, train_group, val_group, category
 
 
 def main():
     df_old = old_data()
-    category_old = df_old.columns[df_old.columns != "time"]
+    category_old = df_old.columns[df_old.columns != "time"].tolist()
     df = latest_data()
-    category = df.columns[df.columns != "time"]
+    category: list[str] = df.columns[df.columns != "time"].tolist()
     assert len(category) == len(list(set(category))), set(
         [x for x in category if category.count(x) > 1]
     )
     n_epochs_pre = 1
-    n_epochs = 1
-    n_epochs_finetune = 1
-    group_pre, _, _ = prepare_timeseries(df_old, category_old, split=False)
-    group, train_group, val_group = prepare_timeseries(df, category, split=True)
+    n_epochs = 10
+    n_epochs_finetune = 10
+    group_pre, _, _, category_old = prepare_timeseries(df_old, category_old, split=False)
+    group, train_group, val_group, category = prepare_timeseries(df, category, split=True)
+    # model = LightGBMModel(12)
+    # model.fit(train_group)
+    # prediction_on_val = model.predict(
+    #     len(val_group[0]), series=train_group
+    # )
+    # model.fit(group)
+    # future_prediction = model.predict(
+    #     18, series=group
+    # )
     model = NBEATSModel(
         input_chunk_length=12,
         output_chunk_length=6,
         save_checkpoints=True,
-        model_name="pretrain",
+        model_name="train",
         force_reset=True,
         n_epochs=0,
         batch_size=1024,
         likelihood=GaussianLikelihood(),
-        num_blocks=2
+        num_blocks=1,
+        pl_trainer_kwargs={"accelerator": "auto"},
+        generic_architecture=False
     )
     model.fit(group_pre, verbose=True, epochs=n_epochs_pre)
-    # shutil.copytree("darts_logs/pretrain", "darts_logs/train", dirs_exist_ok=True)
-    # model = NBEATSModel.load_from_checkpoint("train", best=False)
+    model = NBEATSModel.load_from_checkpoint("train", best=False)
     model.fit(
-        train_group, verbose=True, epochs=n_epochs_pre + n_epochs
+        train_group, verbose=True, epochs=n_epochs
     )
-    # shutil.copytree("darts_logs/train", "darts_logs/finetuning", dirs_exist_ok=True)
     prediction_on_val = model.predict(
-        len(val_group[0]), series=train_group, num_samples=100
+        len(val_group[0]), series=train_group, num_samples=200
     )
-    # model = NBEATSModel.load_from_checkpoint("finetuning", best=False)
-    model.fit(group, verbose=True, epochs=n_epochs_pre + n_epochs + n_epochs_finetune)
-    future_prediction = model.predict(18, series=group, num_samples=100)
+    global_smape = smape(val_group, prediction_on_val)
+    print("global smape", np.mean(global_smape))
+    model = NBEATSModel.load_from_checkpoint("train", best=False)
+    model.fit(group, verbose=True, epochs=n_epochs_finetune)
+    future_prediction = model.predict(18, series=group, num_samples=200)
     smape_val: list[float] = []
+    os.makedirs("data/sheets", exist_ok=True)
+    os.makedirs("data/high_quality", exist_ok=True)
+    os.makedirs("data/low_quality", exist_ok=True)
     for i in tqdm(range(len(val_group))):
         smape_val.append(smape(val_group[i], prediction_on_val[i]))
         plt.figure(figsize=(12, 6))
