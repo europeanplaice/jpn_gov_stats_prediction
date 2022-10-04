@@ -112,7 +112,7 @@ def main():
     #     18, series=group
     # )
     model = NBEATSModel(
-        input_chunk_length=12,
+        input_chunk_length=18,
         output_chunk_length=6,
         save_checkpoints=True,
         model_name="train",
