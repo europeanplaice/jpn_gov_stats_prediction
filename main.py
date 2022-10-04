@@ -1,21 +1,18 @@
+import datetime
+import os
+from typing import Tuple
+
+import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 from darts import TimeSeries
-from darts.models import ExponentialSmoothing, NBEATSModel
-from pytorch_lightning.callbacks.early_stopping import EarlyStopping
-import matplotlib.pyplot as plt
-import datetime
-from scipy.stats import zscore
+from darts.metrics.metrics import smape
+from darts.models import NBEATSModel
 from darts.utils.likelihood_models import GaussianLikelihood
 from tqdm import tqdm
-import copy
-from darts.metrics.metrics import smape
-import os, shutil
-import numpy as np
-from darts.dataprocessing.transformers import Scaler, BoxCox
-from darts.models.forecasting.gradient_boosted_model import LightGBMModel
 
 
-def old_data():
+def old_data() -> pd.DataFrame:
     l = []
     for t in ["出荷", "在庫", "在庫率"]:
         tmp = pd.read_excel("b2015_sgs1j.xlsx", sheet_name=t, header=2)
@@ -31,7 +28,7 @@ def old_data():
     return df
 
 
-def latest_data():
+def latest_data() -> pd.DataFrame:
     l = []
     for group_key, group_val in {"業種別": "b2015_gsm1j", "品目別": "b2015_hsm1j"}.items():
         for t in ["生産", "出荷", "在庫", "在庫率"]:
@@ -61,16 +58,16 @@ def latest_data():
     return df
 
 
-def prepare_timeseries(df: pd.DataFrame, category: list[str], split: bool):
-    train_group = []
-    val_group = []
-    group = []
+def prepare_timeseries(
+    df: pd.DataFrame, category: list[str], split: bool
+) -> Tuple[list[TimeSeries], list[TimeSeries], list[TimeSeries], list[str]]:
+    train_group: list[TimeSeries] = []
+    val_group: list[TimeSeries] = []
+    group: list[TimeSeries] = []
     invalid = []
     for i in category:
-        scaler = BoxCox()
         try:
-            df[i] = df[i].astype(float).values / 100.
-            # df[i] = zscore(df[i].astype(float).values)
+            df[i] = df[i].astype(float).values / 100.0
             series = TimeSeries.from_dataframe(df, time_col="time", value_cols=i)
         except (TypeError, ValueError):
             print("error", i)
@@ -89,7 +86,7 @@ def prepare_timeseries(df: pd.DataFrame, category: list[str], split: bool):
     return group, train_group, val_group, category
 
 
-def main():
+def main() -> None:
     df_old = old_data()
     category_old = df_old.columns[df_old.columns != "time"].tolist()
     df = latest_data()
@@ -100,17 +97,13 @@ def main():
     n_epochs_pre = 1
     n_epochs = 1
     n_epochs_finetune = 1
-    group_pre, _, _, category_old = prepare_timeseries(df_old, category_old, split=False)
-    group, train_group, val_group, category = prepare_timeseries(df, category, split=True)
-    # model = LightGBMModel(12)
-    # model.fit(train_group)
-    # prediction_on_val = model.predict(
-    #     len(val_group[0]), series=train_group
-    # )
-    # model.fit(group)
-    # future_prediction = model.predict(
-    #     18, series=group
-    # )
+    group_pre, _, _, category_old = prepare_timeseries(
+        df_old, category_old, split=False
+    )
+    group, train_group, val_group, category = prepare_timeseries(
+        df, category, split=True
+    )
+    likelihood = GaussianLikelihood()
     model = NBEATSModel(
         input_chunk_length=18,
         output_chunk_length=6,
@@ -119,23 +112,19 @@ def main():
         force_reset=True,
         n_epochs=0,
         batch_size=32,
-        likelihood=GaussianLikelihood(),
+        likelihood=likelihood,
         num_blocks=1,
         pl_trainer_kwargs={"accelerator": "auto"},
         generic_architecture=True,
-        optimizer_kwargs={'lr': 1e-4}
+        optimizer_kwargs={"lr": 1e-4},
     )
     model.fit(group_pre, verbose=True, epochs=n_epochs_pre)
-    # model = NBEATSModel.load_from_checkpoint("train", best=False)
-    model.fit(
-        train_group, verbose=True, epochs=n_epochs
-    )
+    model.fit(train_group, verbose=True, epochs=n_epochs)
     prediction_on_val = model.predict(
         len(val_group[0]), series=train_group, num_samples=200
     )
     global_smape = smape(val_group, prediction_on_val)
     print("global smape", np.mean(global_smape))
-    # model = NBEATSModel.load_from_checkpoint("train", best=False)
     model.fit(group, verbose=True, epochs=n_epochs_finetune)
     future_prediction = model.predict(18, series=group, num_samples=200)
     smape_val: list[float] = []
@@ -148,17 +137,14 @@ def main():
         group[i].plot(label="actual")
         prediction_on_val[i].plot(label="prediction as validation")
         pd.concat(
-            [
-                prediction_on_val[i].quantiles_df(),
-                future_prediction[i].quantiles_df()
-            ]).to_excel(f"data/sheets/{category[i]}.xlsx")
+            [prediction_on_val[i].quantiles_df(), future_prediction[i].quantiles_df()]
+        ).to_excel(f"data/sheets/{category[i]}.xlsx")
         future_prediction[i].plot(label="future prediction")
         plt.legend()
         plt.savefig(f"data/high_quality/{category[i]}.jpg", dpi=300)
         plt.savefig(f"data/low_quality/{category[i]}.jpg", dpi=72)
         plt.close()
     pd.DataFrame({"cat": category, "smape": smape_val}).to_excel("stats.xlsx")
-    # plt.show()
 
 
 if __name__ == "__main__":
