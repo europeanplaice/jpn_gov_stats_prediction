@@ -13,14 +13,14 @@ from tqdm import tqdm
 
 
 def old_data() -> pd.DataFrame:
-    l = []
+    datalist = []
     for t in ["出荷", "在庫", "在庫率"]:
         tmp = pd.read_excel("b2015_sgs1j.xlsx", sheet_name=t, header=2)
         tmp = tmp[tmp["業種名"] != "接続係数"]
         tmp = tmp.set_index("業種名")
         tmp.columns = list(map(lambda x: t + "__" + x, tmp.columns))
-        l.append(tmp)
-    df = pd.concat(l, axis=1)
+        datalist.append(tmp)
+    df = pd.concat(datalist, axis=1)
     df.index = list(
         map(lambda x: datetime.datetime(int(str(x)[:4]), int(str(x)[4:]), 1), df.index)
     )
@@ -28,8 +28,8 @@ def old_data() -> pd.DataFrame:
     return df
 
 
-def latest_data() -> pd.DataFrame:
-    l = []
+def latest_data() -> pd.DataFrame:    
+    datalist = []
     for group_key, group_val in {"業種別": "b2015_gsm1j", "品目別": "b2015_hsm1j"}.items():
         for t in ["生産", "出荷", "在庫", "在庫率"]:
             tmp = pd.read_excel(f"{group_val}.xlsx", sheet_name=t, header=2)
@@ -45,8 +45,8 @@ def latest_data() -> pd.DataFrame:
             del tmp["品目番号"]
             del tmp["p 202208"]
             tmp = tmp.set_index("品目名称")
-            l.append(tmp)
-    df = pd.concat(l)
+            datalist.append(tmp)
+    df = pd.concat(datalist)
     df.index.name = None
     df.columns = list(
         map(
