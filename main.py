@@ -13,6 +13,10 @@ from tqdm import tqdm
 
 
 def old_data() -> pd.DataFrame:
+    """
+    Gets data before 2015.
+    The format is different from the one after 2015.
+    """
     datalist = []
     for t in ["出荷", "在庫", "在庫率"]:
         tmp = pd.read_excel("b2015_sgs1j.xlsx", sheet_name=t, header=2)
@@ -28,7 +32,10 @@ def old_data() -> pd.DataFrame:
     return df
 
 
-def latest_data() -> pd.DataFrame:    
+def latest_data() -> pd.DataFrame:
+    """
+    Gets data after 2015.
+    """
     datalist = []
     for group_key, group_val in {"業種別": "b2015_gsm1j", "品目別": "b2015_hsm1j"}.items():
         for t in ["生産", "出荷", "在庫", "在庫率"]:
@@ -61,6 +68,9 @@ def latest_data() -> pd.DataFrame:
 def prepare_timeseries(
     df: pd.DataFrame, category: list[str], split: bool
 ) -> Tuple[list[TimeSeries], list[TimeSeries], list[TimeSeries], list[str]]:
+    """
+    Convert pandas dataframe to darts timeseries
+    """
     train_group: list[TimeSeries] = []
     val_group: list[TimeSeries] = []
     group: list[TimeSeries] = []
