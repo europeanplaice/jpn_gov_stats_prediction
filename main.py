@@ -5,9 +5,9 @@ from typing import Tuple
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from darts import TimeSeries
 from darts.metrics.metrics import smape
-from darts.models import NBEATSModel
+from darts.models.forecasting.nbeats import NBEATSModel
+from darts.timeseries import TimeSeries
 from darts.utils.likelihood_models import GaussianLikelihood
 from tqdm import tqdm
 
@@ -16,6 +16,7 @@ def old_data() -> pd.DataFrame:
     """
     Gets data before 2015.
     The format is different from the one after 2015.
+    The data is used for additional training.
     """
     datalist = []
     for t in ["出荷", "在庫", "在庫率"]:
@@ -104,10 +105,10 @@ def main() -> None:
     assert len(category) == len(list(set(category))), set(
         [x for x in category if category.count(x) > 1]
     )
-    n_epochs_pre = 1
+    n_epochs_pretrain = 1
     n_epochs = 1
     n_epochs_finetune = 1
-    group_pre, _, _, category_old = prepare_timeseries(
+    pretrain_group, _, _, category_old = prepare_timeseries(
         df_old, category_old, split=False
     )
     group, train_group, val_group, category = prepare_timeseries(
@@ -128,7 +129,7 @@ def main() -> None:
         generic_architecture=True,
         optimizer_kwargs={"lr": 1e-4},
     )
-    model.fit(group_pre, verbose=True, epochs=n_epochs_pre)
+    model.fit(pretrain_group, verbose=True, epochs=n_epochs_pretrain)
     model.fit(train_group, verbose=True, epochs=n_epochs)
     prediction_on_val = model.predict(
         len(val_group[0]), series=train_group, num_samples=200

@@ -1,0 +1,7 @@
+env/
+env2/
+darts_logs/
+data/
+*.xlsx
+*.xls
+*.ipynb
